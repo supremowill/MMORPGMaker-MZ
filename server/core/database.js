@@ -2,23 +2,14 @@
 const r = require("rethinkdb");
 const async = require("async");
 
-/*****************************
-      PUBLIC FUNCTIONS
-*****************************/
-
+// Configuração do Servidor
 exports.SERVER_CONFIG = {};
 
+// Inicializar Banco de Dados
 exports.initialize = function(callback) {
-    // In case we need more tables in the future
-    const tables = [
-        "users",
-        "banks",
-        "config"
-    ];
+    const tables = ["users", "banks", "config"];
 
-    // We check if the database exist
     onConnect(function(_err, conn) {
-    // IMPORTANT : DO NOT TOUCH THIS
         const initialServerConfig = {
             port: 8097,
             passwordRequired: true,
@@ -35,34 +26,27 @@ exports.initialize = function(callback) {
                 x: 5,
                 y: 5
             },
-            globalSwitches: {
-            },
-            partySwitches: {
-            },
-            globalVariables: {
-            },
-            offlineMaps: {
-            }
+            globalSwitches: {},
+            partySwitches: {},
+            globalVariables: {},
+            offlineMaps: {}
         };
 
         r.dbList().run(conn, function(_err, results) {
-            // If the database exist, we have nothing to do
             if (results.indexOf("mmorpg") !== -1) {
-                conn.close(); // We close the connection
+                conn.close();
                 MMO_Core.security.loadTokens();
-                console.log("[I] Database initialized with success"); // And we abort any additional procedures
+                console.log("[I] Database initialized successfully!");
                 return callback();
             }
 
-            console.log("[O] I have not found the database! 😱  Let me fix that for you...");
-            // Else, we create the database and its tables
+            console.log("[O] Database not found! Creating now...");
             r.dbCreate("mmorpg").run(conn, function(_err, result) {
-                console.log("[I] Database was created with success");
+                console.log("[I] Database created successfully!");
 
-                // We create the tables asynchronously
                 async.each(tables, function(item, callback) {
                     r.db("mmorpg").tableCreate(item).run(conn, function(_err, result) {
-                        console.log("[I] Table " + item + " was created with success");
+                        console.log(`[I] Table ${item} created successfully!`);
 
                         if (item === "users") {
                             const user = initialServerConfig.newPlayerDetails;
@@ -76,7 +60,7 @@ exports.initialize = function(callback) {
                             });
                         } else if (item === "config") {
                             r.db("mmorpg").table("config").insert([initialServerConfig]).run(conn, (_err, result) => {
-                                console.log("[I] Initial server configuration was created with success.");
+                                console.log("[I] Initial server configuration created successfully.");
                                 return callback();
                             });
                         } else {
@@ -84,227 +68,96 @@ exports.initialize = function(callback) {
                         }
                     });
                 }, function(_err) {
-                    conn.close(); // We close the connection at the end
-                    console.log("[I] All good! Everything is ready for you 😘");
-                    console.log("[I] Database initialized with success");
-                    return callback(); // Yay
+                    conn.close();
+                    console.log("[I] Database is fully set up! 🚀");
+                    return callback();
                 });
             });
         });
     });
 };
 
+// Conectar ao RethinkDB
+onConnect = function(callback) {
+    r.connect({
+        host: process.env.RETHINKDB_HOST || "localhost",
+        port: parseInt(process.env.RETHINKDB_PORT) || 28015,
+        password: process.env.RETHINKDB_PASSWORD || "" // Adicionada autenticação por senha
+    }, function(err, connection) {
+        if (err) {
+            console.error("[❌] Error connecting to RethinkDB:", err);
+            return callback(err, null);
+        }
+        console.log("[✅] Connected to RethinkDB!");
+        callback(null, connection);
+    });
+};
+
+// Buscar todos os usuários
 exports.getPlayers = function(callback) {
     onConnect(function(_err, conn) {
-        r.db("mmorpg").table("users")
-            .run(conn)
-            .then(function(cursor) {
-                return cursor.toArray();
-            })
-            .then(function(output) {
-                callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
+        if (_err) return callback([]);
+        r.db("mmorpg").table("users").run(conn)
+            .then(cursor => cursor.toArray())
+            .then(output => callback(output))
+            .finally(() => conn.close());
     });
 };
 
+// Encontrar usuário pelo nome
 exports.findUser = function(userDetails, callback) {
     onConnect(function(_err, conn) {
+        if (_err) return callback([]);
         r.db("mmorpg").table("users")
-        // .filter({ username: userDetails["username"] })
-            .filter(function(user) {
-                return user("username").match("(?i)^" + userDetails.username + "$");
-            })
+            .filter(user => user("username").match("(?i)^" + userDetails.username + "$"))
             .run(conn)
-            .then(function(cursor) {
-                return cursor.toArray();
-            })
-            .then(function(output) {
-                return callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
+            .then(cursor => cursor.toArray())
+            .then(output => callback(output))
+            .finally(() => conn.close());
     });
 };
 
-exports.findUserById = function(userId, callback) {
-    onConnect(function(_err, conn) {
-        r.db("mmorpg").table("users")
-            .get(userId)
-            .run(conn)
-            .then(function(output) {
-                return callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
-    });
-};
-
+// Deletar usuário
 exports.deleteUser = function(userId, callback) {
     onConnect(function(_err, conn) {
-        r.db("mmorpg").table("users")
-            .get(userId)
-            .delete()
-            .run(conn)
-            .then(function(output) {
-                callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
+        if (_err) return callback(null);
+        r.db("mmorpg").table("users").get(userId).delete().run(conn)
+            .then(output => callback(output))
+            .finally(() => conn.close());
     });
 };
 
+// Registrar novo usuário
 exports.registerUser = function(userDetails, callback) {
     const userPayload = exports.SERVER_CONFIG.newPlayerDetails;
     userPayload.username = userDetails.username;
-    userPayload.permission = 0; // Just making sure.
+    userPayload.permission = 0;
     if (exports.SERVER_CONFIG.passwordRequired) {
         userPayload.password = MMO_Core.security.hashPassword(userDetails.password.toLowerCase());
     }
 
     onConnect(function(_err, conn) {
-        r.db("mmorpg").table("users")
-            .insert(userPayload)
-            .run(conn)
-            .then(function(output) {
-                return callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
+        if (_err) return callback(null);
+        r.db("mmorpg").table("users").insert(userPayload).run(conn)
+            .then(output => callback(output))
+            .finally(() => conn.close());
     });
 };
 
+// Salvar usuário
 exports.savePlayer = function(playerData, callback) {
-    // We delete what we don't want to be saved (in case it is there)
-
     onConnect(function(_err, conn) {
-        let request = r.db("mmorpg").table("users")
-            .filter(function(user) {
-                return user("username").match("(?i)^" + playerData.username + "$");
-            })
-            .update(playerData);
-
-        if (playerData.stats) {
-            request = request.do(r.db("mmorpg").table("users")
-                .filter(function(user) {
-                    return user("username").match("(?i)^" + playerData.username + "$");
-                })
-                .update({ stats: r.literal(playerData.stats) }));
-        }
-
-        request.run(conn)
-            .then(function(cursor) {
-                return cursor;
-            })
-            .then(function(output) {
-                return callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
-    });
-};
-
-exports.savePlayerById = function(playerData, callback) {
-    onConnect(function(_err, conn) {
-        let request = r.db("mmorpg").table("users")
-            .get(playerData.id)
-            .update(playerData);
-
-        if (playerData.stats) {
-            request = request.do(r.db("mmorpg").table("users")
-                .filter(function(user) {
-                    return user("username").match("(?i)^" + playerData.username + "$");
-                })
-                .update({ stats: r.literal(playerData.stats) }));
-        }
-
-        request.run(conn)
-            .then(function(cursor) {
-                return cursor;
-            })
-            .then(function(output) {
-                return callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
-    });
-};
-
-/// ////////////// BANKS
-
-exports.getBanks = (callback) => {
-    onConnect(function(_err, conn) {
-        r.db("mmorpg").table("banks")
+        if (_err) return callback(null);
+        r.db("mmorpg").table("users")
+            .filter(user => user("username").match("(?i)^" + playerData.username + "$"))
+            .update(playerData)
             .run(conn)
-            .then(function(cursor) {
-                return cursor.toArray();
-            })
-            .then(function(output) {
-                callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
+            .then(output => callback(output))
+            .finally(() => conn.close());
     });
 };
 
-exports.getBank = (bankName, callback) => {
-    onConnect(function(_err, conn) {
-        r.db("mmorpg").table("banks")
-            .filter({ name: bankName })
-            .run(conn)
-            .then(function(cursor) {
-                return cursor.toArray();
-            })
-            .then(function(output) {
-                callback(output[0]);
-            })
-            .finally(function() {
-                conn.close();
-            });
-    });
-};
-
-exports.getBankById = function(bankId, callback) {
-    onConnect(function(_err, conn) {
-        r.db("mmorpg").table("banks")
-            .get(bankId)
-            .run(conn)
-            .then(function(cursor) {
-                return cursor;
-            })
-            .then(function(output) {
-                callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
-    });
-};
-
-exports.saveBank = function(bank, callback) {
-    onConnect(function(_err, conn) {
-        r.db("mmorpg").table("banks")
-            .get(bank.id)
-            .update(bank)
-            .run(conn)
-            .then(function(output) {
-                callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
-    });
-};
-
+// Criar um novo banco (cofre)
 exports.createBank = function(payload, callback) {
     const content = (payload.type === "global") ? { items: {}, weapons: {}, armors: {}, gold: 0 } : {};
     const template = {
@@ -314,106 +167,43 @@ exports.createBank = function(payload, callback) {
     };
 
     onConnect(function(_err, conn) {
-        r.db("mmorpg").table("banks")
-            .insert(template)
-            .run(conn)
-            .then(function(output) {
-                callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
+        if (_err) return callback(null);
+        r.db("mmorpg").table("banks").insert(template).run(conn)
+            .then(output => callback(output))
+            .finally(() => conn.close());
     });
 };
 
-exports.deleteBank = function(bankId, callback) {
+// Atualizar configuração do servidor
+exports.changeConfig = function(type, payload, callback) {
     onConnect(function(_err, conn) {
-        r.db("mmorpg").table("banks")
-            .get(bankId)
-            .delete()
-            .run(conn)
-            .then(function(output) {
-                callback(output);
-            })
-            .finally(function() {
-                conn.close();
-            });
+        if (_err) return callback(null);
+        let query = r.db("mmorpg").table("config")(0);
+
+        const updates = {
+            globalSwitches: { globalSwitches: r.literal(payload) },
+            partySwitches: { partySwitches: r.literal(payload) },
+            offlineMaps: { offlineMaps: r.literal(payload) },
+            globalVariables: { globalVariables: r.literal(payload) },
+            newPlayerDetails: { newPlayerDetails: r.literal(payload) }
+        };
+
+        query = query.update(updates[type] || {});
+        query.run(conn)
+            .then(() => exports.reloadConfig(() => console.log("[I] Server configuration updated.")))
+            .finally(() => conn.close());
     });
 };
 
-/// ////////////// SERVER
-
+// Recarregar configuração do servidor
 exports.reloadConfig = function(callback) {
     onConnect(function(_err, conn) {
+        if (_err) return callback();
         r.db("mmorpg").table("config")(0).run(conn)
-            .then(function(cursor) {
-                return cursor;
-            })
-            .then(function(output) {
+            .then(output => {
                 exports.SERVER_CONFIG = output;
                 callback();
             })
-            .finally(() => {
-                conn.close();
-            });
-    });
-};
-
-exports.changeConfig = function(type, payload, callback) {
-    onConnect(function(_err, conn) {
-        let query = r.db("mmorpg").table("config")(0);
-
-        if (type === "globalSwitches") {
-            query = query.update({ globalSwitches: r.literal(payload) });
-        } else if (type === "partySwitches") {
-            query = query.update({ partySwitches: r.literal(payload) });
-        } else if (type === "offlineMaps") {
-            query = query.update({ offlineMaps: r.literal(payload) });
-        } else if (type === "globalVariables") {
-            query = query.update({ globalVariables: r.literal(payload) });
-        } else if (type === "newPlayerDetails") {
-            query = query.update({ newPlayerDetails: r.literal(payload) });
-        }
-
-        query.run(conn)
-            .then(function(cursor) {
-                return cursor;
-            })
-            .then(function(output) {
-                exports.reloadConfig(() => {
-                    console.log("[I] Server configuration changes saved.");
-                });
-                callback();
-            })
-            .finally(() => {
-                conn.close();
-            });
-    });
-};
-
-exports.saveConfig = function() {
-    onConnect(function(_err, conn) {
-        r.db("mmorpg").table("config")(0)
-            .update(exports.SERVER_CONFIG)
-            .run(conn)
-            .then(() => {
-                console.log("[I] Server configuration changes saved.");
-            })
-            .finally(() => {
-                conn.close();
-            });
-    });
-};
-
-// eslint-disable-next-line no-global-assign
-onConnect = function(callback) {
-    r.connect({
-        host: process.env.RETHINKDB_HOST || "localhost",
-        port: parseInt(process.env.RETHINKDB_PORT) || 28015
-    }, function(err, connection) {
-        if (err) {
-            throw err;
-        }
-        callback(err, connection);
+            .finally(() => conn.close());
     });
 };
