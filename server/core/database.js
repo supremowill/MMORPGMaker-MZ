@@ -1,11 +1,13 @@
+require('dotenv').config();
 const { Pool } = require("pg");
 
 const pool = new Pool({
-    user: process.env.PG_USER || "seu_usuario",
-    host: process.env.PG_HOST || "seu_host.supabase.co",
-    database: process.env.PG_DB || "seu_banco",
-    password: process.env.PG_PASSWORD || "sua_senha",
-    port: 5432
+    user: process.env.PG_USER,
+    host: process.env.PG_HOST,
+    database: process.env.PG_DB,
+    password: process.env.PG_PASSWORD,
+    port: process.env.PG_PORT,
+    ssl: { rejectUnauthorized: false } // Necessário para Supabase
 });
 
 /*****************************
@@ -20,7 +22,7 @@ exports.initialize = async function() {
 
         // Verifica se a tabela de configuração existe
         const res = await client.query("SELECT COUNT(*) FROM config;");
-        if (res.rows.length === 0) {
+        if (parseInt(res.rows[0].count) === 0) {
             console.log("[O] Configuração não encontrada. Criando...");
             
             const initialConfig = {
@@ -45,8 +47,18 @@ exports.initialize = async function() {
                 offlineMaps: {}
             };
 
-            await client.query("INSERT INTO config (port, passwordRequired, newPlayerDetails, globalSwitches, partySwitches, globalVariables, offlineMaps) VALUES ($1, $2, $3, $4, $5, $6, $7)", 
-                [initialConfig.port, initialConfig.passwordRequired, initialConfig.newPlayerDetails, initialConfig.globalSwitches, initialConfig.partySwitches, initialConfig.globalVariables, initialConfig.offlineMaps]);
+            await client.query(
+                "INSERT INTO config (port, passwordRequired, newPlayerDetails, globalSwitches, partySwitches, globalVariables, offlineMaps) VALUES ($1, $2, $3, $4, $5, $6, $7)", 
+                [
+                    initialConfig.port,
+                    initialConfig.passwordRequired,
+                    initialConfig.newPlayerDetails,
+                    initialConfig.globalSwitches,
+                    initialConfig.partySwitches,
+                    initialConfig.globalVariables,
+                    initialConfig.offlineMaps
+                ]
+            );
 
             console.log("[I] Configuração inicial criada.");
         }
@@ -106,8 +118,10 @@ exports.registerUser = async function(userDetails, callback) {
             password: userDetails.password ? MMO_Core.security.hashPassword(userDetails.password.toLowerCase()) : null
         };
 
-        await pool.query("INSERT INTO users (username, permission, password) VALUES ($1, $2, $3);", 
-            [userPayload.username, userPayload.permission, userPayload.password]);
+        await pool.query(
+            "INSERT INTO users (username, permission, password) VALUES ($1, $2, $3);", 
+            [userPayload.username, userPayload.permission, userPayload.password]
+        );
 
         callback(true);
     } catch (err) {
@@ -118,8 +132,10 @@ exports.registerUser = async function(userDetails, callback) {
 
 exports.savePlayer = async function(playerData, callback) {
     try {
-        await pool.query("UPDATE users SET mapId = $1, x = $2, y = $3, stats = $4 WHERE username = $5;", 
-            [playerData.mapId, playerData.x, playerData.y, playerData.stats, playerData.username]);
+        await pool.query(
+            "UPDATE users SET mapId = $1, x = $2, y = $3, stats = $4 WHERE username = $5;", 
+            [playerData.mapId, playerData.x, playerData.y, playerData.stats, playerData.username]
+        );
 
         callback(true);
     } catch (err) {
@@ -162,8 +178,10 @@ exports.createBank = async function(payload, callback) {
     try {
         const content = (payload.type === "global") ? { items: {}, weapons: {}, armors: {}, gold: 0 } : {};
 
-        await pool.query("INSERT INTO banks (name, type, content) VALUES ($1, $2, $3);", 
-            [payload.name, payload.type, content]);
+        await pool.query(
+            "INSERT INTO banks (name, type, content) VALUES ($1, $2, $3);", 
+            [payload.name, payload.type, content]
+        );
 
         callback(true);
     } catch (err) {
@@ -185,8 +203,16 @@ exports.reloadConfig = async function(callback) {
 
 exports.saveConfig = async function() {
     try {
-        await pool.query("UPDATE config SET newPlayerDetails = $1, globalSwitches = $2, partySwitches = $3, globalVariables = $4, offlineMaps = $5 WHERE id = 1;", 
-            [exports.SERVER_CONFIG.newPlayerDetails, exports.SERVER_CONFIG.globalSwitches, exports.SERVER_CONFIG.partySwitches, exports.SERVER_CONFIG.globalVariables, exports.SERVER_CONFIG.offlineMaps]);
+        await pool.query(
+            "UPDATE config SET newPlayerDetails = $1, globalSwitches = $2, partySwitches = $3, globalVariables = $4, offlineMaps = $5 WHERE id = 1;", 
+            [
+                exports.SERVER_CONFIG.newPlayerDetails,
+                exports.SERVER_CONFIG.globalSwitches,
+                exports.SERVER_CONFIG.partySwitches,
+                exports.SERVER_CONFIG.globalVariables,
+                exports.SERVER_CONFIG.offlineMaps
+            ]
+        );
 
         console.log("[I] Configuração do servidor salva.");
     } catch (err) {
