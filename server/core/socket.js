@@ -69,24 +69,21 @@ exports.loadModules = function(path, isSub) {
 };
 
 // Return all connected sockets to the world or specific room (map-* OR party-*)
-exports.getConnectedSockets = function(roomName) {
-    return new Promise(resolve => {
-        const sockets = [];
-        const ns = exports.socketConnection.of("/");
+exports.getConnectedSockets = async function(roomName) {
+    const sockets = [];
+    const allSockets = await exports.socketConnection.fetchSockets();
 
-        for (const id in ns.connected) {
-            if (roomName) {
-                const index = ns.connected[id].rooms.indexOf(roomName);
-                if (index !== -1) {
-                    sockets.push(ns.connected[id]);
-                }
-            } else {
-                sockets.push(ns.connected[id]);
+    for (const socket of allSockets) {
+        if (roomName) {
+            if (socket.rooms.has(roomName)) {
+                sockets.push(socket);
             }
+        } else {
+            sockets.push(socket);
         }
+    }
 
-        return resolve(sockets);
-    });
+    return sockets;
 };
 
 // Send a socket to the entire server

@@ -28,6 +28,10 @@ I joined the project in September 2020 and made the MZ version a few weeks later
 
 *Note : It's not needed to touch any package file anymore*
 
+### Important Notes
+
+**Socket.IO Versioning:** The server has been updated to use `socket.io` version 4.x. If you are developing a custom client or modifying the existing one, please ensure your `socket.io-client` is also version 4.x to maintain compatibility. The client part of this project (using the root `package.json`) is configured for `socket.io-client ^4.5.1`.
+
 ### Plugins requirement 
 
 **Disclaimer :** *The following files are already contained in the project.*
